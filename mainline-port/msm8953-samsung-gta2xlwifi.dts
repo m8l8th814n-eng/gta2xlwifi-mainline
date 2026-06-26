@@ -12,15 +12,22 @@
 
 #include "msm8953.dtsi"
 #include "pm8953.dtsi"
-#include "pmi8950.dtsi"
+/* No pmi8950/pmi8937 on this board — gta2 pairs pm8953 only (confirmed from
+ * the live downstream fdt). Including a non-existent PMIC makes the SPMI probe
+ * fail (-EIO) and blocks everything behind it. */
 
 / {
 	model = "Samsung Galaxy Tab A 10.5 (2018, Wi-Fi)";
 	compatible = "samsung,gta2xlwifi", "qcom,msm8953";
 	chassis-type = "tablet";
 
-	/* TODO: confirm against lk2nd; downstream used qcom,board-id = <8 5> */
-	qcom,board-id = <8 5>;
+	/*
+	 * lk2nd selects this DT by matching the SoC/board IDs the bootloader
+	 * reports. Values read from the device's live downstream fdt
+	 * (/sys/firmware/fdt): SDM450, board-id 8/4 (LTE-class unit).
+	 */
+	qcom,msm-id = <0x152 0x0>;
+	qcom,board-id = <0x08 0x04>;
 
 	chosen {
 		#address-cells = <2>;
@@ -28,9 +35,10 @@
 		ranges;
 
 		/*
-		 * Continuous splash framebuffer set up by the bootloader.
-		 * Panel is 1200x1920 (WUXGA, Himax HX8279 TV101WUM).
-		 * TODO: verify base address from lk2nd / downstream cont_splash.
+		 * Reuse lk2nd's continuous-splash framebuffer (panel already lit by
+		 * lk2nd). The real msm DSI display is kept disabled (see end of file)
+		 * so it doesn't reset the panel; simpledrm draws into this buffer.
+		 * The MDSS clocks are held on here so the MDP keeps scanning it out.
 		 */
 		framebuffer@90001000 {
 			compatible = "simple-framebuffer";
@@ -74,6 +82,61 @@
 		regulator-always-on;
 		regulator-boot-on;
 	};
+
+	/*
+	 * Panel VSP/VSN come from an ISL98608 on i2c, gated by tlmm 134
+	 * (downstream isl98608_en_gpio). lk2nd already programmed its output
+	 * voltages, so we just keep it enabled and model both rails as this
+	 * single fixed supply.
+	 */
+	panel_vsp_vsn: regulator-isl98608 {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vsp_vsn";
+		gpio = <&tlmm 134 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		/* always-on so the regulator core never power-cycles the ISL98608
+		 * (that would drop lk2nd's i2c-programmed VSP/VSN voltages) */
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	/*
+	 * Panel VDDR (1.5V) extra rail — downstream samsung,panel-extra-power-gpio1
+	 * on tlmm 35. The generated HX8279 driver doesn't request it, so assert it
+	 * always-on so the panel has power before/through init.
+	 */
+	panel_vddr: regulator-panel-vddr {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vddr";
+		gpio = <&tlmm 35 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	/*
+	 * Touchscreen power — downstream uses gpio-gated fixed regulators
+	 * (NOT pm8953 rails): tsp_avdd 3.3V on tlmm 139, tsp_dvdd 1.8V on tlmm 140.
+	 */
+	tsp_avdd: regulator-tsp-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "tsp_avdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tlmm 139 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
+	tsp_dvdd: regulator-tsp-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "tsp_dvdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 140 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
 };
 
 &hsusb_phy {
@@ -95,9 +158,8 @@
 		interrupt-parent = <&tlmm>;
 		interrupts = <59 IRQ_TYPE_LEVEL_LOW>;
 
-		/* TODO: confirm regulator rails (downstream: tsp_avdd ~2.9V, tsp_dvdd 1.8V) */
-		vdd-supply = <&pm8953_l10>;
-		avdd-supply = <&pm8953_l6>;
+		vdd-supply = <&tsp_dvdd>;	/* 1.8V digital (tlmm 140) */
+		avdd-supply = <&tsp_avdd>;	/* 3.3V analog (tlmm 139) */
 
 		touchscreen-size-x = <1200>;
 		touchscreen-size-y = <1920>;
@@ -107,14 +169,6 @@
 /* Volume Down */
 &pm8953_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
-	status = "okay";
-};
-
-/* Display backlight (WLED) */
-&pmi8950_wled {
-	qcom,current-limit-microamp = <20000>;
-	qcom,num-strings = <2>;
-
 	status = "okay";
 };
 
@@ -265,7 +319,7 @@
 };
 
 &tlmm {
-	gpio-reserved-ranges = <0 4>, <16 4>, <135 4>;
+	gpio-reserved-ranges = <0 2>, <16 4>, <135 4>;
 };
 
 /* Serial console (via lk2nd) */
@@ -290,10 +344,30 @@
 };
 
 /*
+ * Display: simpledrm on lk2nd's continuous-splash framebuffer
+ * (chosen/framebuffer@90001000). The real msm DSI display + HX8279 panel are
+ * kept DISABLED so the kernel never resets the already-lit panel. The panel
+ * rails (panel_vsp_vsn / panel_vddr, both always-on) keep it powered.
+ * TODO: finish the real DSI panel later (ISL98608 i2c VSP/VSN config + verify
+ * the generated HX8279 init sequence), then re-enable mdss/dsi0 and drop simpledrm.
+ */
+&mdss {
+	status = "disabled";
+};
+
+&mdss_dsi0 {
+	status = "disabled";
+};
+
+&mdss_dsi0_phy {
+	status = "disabled";
+};
+
+/*
  * TODO (next bring-up steps):
- *  - DSI panel: Himax HX8279 TV101WUM WUXGA (1200x1920), reset gpio tlmm 50,
- *    extra power gpio tlmm 35 (1.5V), panel power via ISL98608 @ i2c 0x29.
- *    Needs &mdss / &dsi0 / panel node + generated panel driver.
+ *  - ISL98608 modelled as one enable-only fixed regulator. If the panel still
+ *    won't light, a real isl98608 regulator driver + i2c node (0x29) may be
+ *    needed to program VSP/VSN voltages (downstream also had vddr gpio 35).
  *  - Wi-Fi/BT: &wcnss (pronto) — enable once regulators/iris are mapped.
  *  - Sensors (i2c-gpio), vibrator, charger/fuel-gauge (s2mu004/s2mm005).
  */

@@ -33,8 +33,12 @@ if ! grep -q "$DTS_NAME.dtb" "$QCOM/Makefile"; then
 	echo "lade till Makefile-rad för $DTS_NAME.dtb"
 fi
 
-# 3. verifiera att den kompilerar (host dtc, snabbt)
-echo "=== kompilerar dtb (verifiering) ==="
-make -C "$KTREE" ARCH=arm64 W=1 "qcom/$DTS_NAME.dtb"
+# 3. verifiera att den kompilerar — OUT-OF-TREE (O=) så källträdet inte
+#    förorenas med host-byggda artefakter (de kraschar pmbootstrap-bygget).
+echo "=== kompilerar dtb (verifiering, out-of-tree) ==="
+VERIFY_OUT="$(mktemp -d)"
+trap 'rm -rf "$VERIFY_OUT"' EXIT
+make -C "$KTREE" O="$VERIFY_OUT" ARCH=arm64 defconfig >/dev/null
+make -C "$KTREE" O="$VERIFY_OUT" ARCH=arm64 W=1 "qcom/$DTS_NAME.dtb"
 echo
-echo "OK — $QCOM/$DTS_NAME.dtb byggd. Redo för pmbootstrap build."
+echo "OK — dts:en kompilerar. Källträdet är rent och redo för pmbootstrap build."
