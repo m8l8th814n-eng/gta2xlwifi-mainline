@@ -7,17 +7,6 @@ Bygger ovanpå pmOS generiska device-profil **`qcom-msm8953`** (systemd-edge,
 XFCE), kärna `linux-postmarketos-qcom-msm8953` (msm8953-mainline/linux v7.0.9-r0),
 bootloader **lk2nd**.
 
-## Help wanted
-
-Bootar och visar bild (simpledrm); öppna problem där hjälp uppskattas:
-
-1. **Touch** — `st,stmfts` driver, chipet får ström och svarar på i2c men
-   `SYSTEM_RESET` timeoutar (`-110`). Trolig orsak: panelen använder ST
-   **fts1ba90a** som mainline-stmfts inte talar med. Behöver verifieras / ny driver.
-2. **GPU-accel** — Adreno 506 probar inte (saknar `a506_zap`-shader). Utan accel
-   är allt mjukvarurenderat. Att få DRM_MSM-GPU:n upp skulle ge riktig display.
-3. **Spontana reboots** — trolig watchdog (qcom_wdt) när userspace hänger.
-
 ## Status
 
 | Funktion | Läge |
