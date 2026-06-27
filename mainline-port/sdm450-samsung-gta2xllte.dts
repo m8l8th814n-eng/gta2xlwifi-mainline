@@ -168,7 +168,7 @@
 	status = "okay";
 
 	touchscreen@49 {
-		compatible = "st,stmfts";
+		compatible = "st,fts1ba90a";
 		reg = <0x49>;
 
 		interrupt-parent = <&tlmm>;

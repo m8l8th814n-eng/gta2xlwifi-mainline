@@ -22,7 +22,7 @@ OUT="$HERE/images/boot.img"
 # Root/boot-UUID lästa från installen på mmcblk1p47 (se README).
 ROOT_UUID="07d2abef-9505-4fc9-a6da-b6e69594ae30"
 BOOT_UUID="1298aa1d-1977-4172-a50b-d7aead5d4569"
-CMDLINE="console=tty0 console=ttyMSM0,115200 ignore_loglevel loglevel=8 fbcon=nodefer \
+CMDLINE="console=tty0 ignore_loglevel loglevel=8 fbcon=nodefer \
 pmos_root_uuid=$ROOT_UUID pmos_boot_uuid=$BOOT_UUID pmos_rootfsopts=defaults"
 
 # mkbootimg-offsets (gta2 downstream deviceinfo)
