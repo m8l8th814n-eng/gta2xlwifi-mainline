@@ -447,8 +447,15 @@
  * pm8953 SPMI-controlled regulators. s5 (vreg_apc) = CPU core rail.
  */
 &spmi_regulators {
+	/*
+	 * s5 (vreg_apc) = CPU core rail, driven by the b018000 CPR.
+	 * Range must match the pm8953 default / working msm8953 devices and
+	 * be 5 mV-aligned (qcom,voltage-step = 5000) — otherwise s5 fails to
+	 * register (-EINVAL), the CPR defers forever and cpufreq/OPP dies.
+	 * 1036000 was NOT a valid set point; 400000-1065000 is the correct range.
+	 */
 	s5 {
-		regulator-min-microvolt = <1036000>;
-		regulator-max-microvolt = <2040000>;
+		regulator-min-microvolt = <400000>;
+		regulator-max-microvolt = <1065000>;
 	};
 };
